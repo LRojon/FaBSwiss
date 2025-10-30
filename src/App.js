@@ -1,24 +1,35 @@
-import logo from './logo.svg';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './App.css';
+
+// Composants
+import Header from './components/Header';
+import TournamentList from './components/TournamentList';
+import TournamentView from './components/TournamentView';
+import PlayerManagement from './components/PlayerManagement';
+import GlobalPlayerManagement from './components/GlobalPlayerManagement';
+import RoundManagement from './components/RoundManagement';
+import Standings from './components/Standings';
+import EliminationBracket from './components/EliminationBracket';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Router>
+      <div className="App">
+        <Header />
+        <main className="main-content">
+          <Routes>
+            <Route path="/" element={<TournamentList />} />
+            <Route path="/players" element={<GlobalPlayerManagement />} />
+            <Route path="/tournament/:id" element={<TournamentView />} />
+            <Route path="/tournament/:id/players" element={<PlayerManagement />} />
+            <Route path="/tournament/:id/round/:roundNumber" element={<RoundManagement />} />
+            <Route path="/tournament/:id/standings" element={<Standings />} />
+            <Route path="/tournament/:id/bracket" element={<EliminationBracket />} />
+          </Routes>
+        </main>
+      </div>
+    </Router>
   );
 }
 
