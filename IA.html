@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Gestionnaire de tournois Flesh and Blood">
+  <meta name="theme-color" content="#dc2626">
+  <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiRkFCIFRvdXJuYW1lbnQgTWFuYWdlciIsInNob3J0X25hbWUiOiJGQUIgVG91cm5vaSIsInN0YXJ0X3VybCI6Ii8iLCJkaXNwbGF5Ijoic3RhbmRhbG9uZSIsImJhY2tncm91bmRfY29sb3IiOiIjMTExODI3IiwidGhlbWVfY29sb3IiOiIjZGMyNjI2IiwiaWNvbnMiOlt7InNyYyI6ImRhdGE6aW1hZ2Uvc3ZnK3htbCwlM0NzdmclMjB4bWxucyUzRCUyN2h0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnJTI3JTIwd2lkdGglM0QlMjcxOTIlMjclMjBoZWlnaHQlM0QlMjcxOTIlMjclM0UlM0NyZWN0JTIwZmlsbCUzRCUyNyUyM2RjMjYyNiUyNyUyMHdpZHRoJTNEJTI3MTkyJTI3JTIwaGVpZ2h0JTNEJTI3MTkyJTI3LyUzRSUzQy9zdmclM0UiLCJzaXplcyI6IjE5MngxOTIiLCJ0eXBlIjoiaW1hZ2Uvc3ZnK3htbCJ9XX0=">
+  <title>FAB Tournament Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { overscroll-behavior: none; }
+  </style>
+</head>
+<body class="bg-gray-900 text-gray-100">
+  <div id="app"></div>
+
+  <script type="module">
+    import React, { useState, useEffect } from 'https://esm.sh/react@18.2.0';
+    import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+
+    // IndexedDB setup
+    const DB_NAME = 'FABTournamentDB';
+    const DB_VERSION = 1;
+    let db;
+
+    const initDB = () => {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          db = request.result;
+          resolve(db);
+        };
+        
+        request.onupgradeneeded = (e) => {
+          const database = e.target.result;
+          if (!database.objectStoreNames.contains('tournaments')) {
+            database.createObjectStore('tournaments', { keyPath: 'id' });
+          }
+        };
+      });
+    };
+
+    const saveTournamentDB = async (tournament) => {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(['tournaments'], 'readwrite');
+        const store = tx.objectStore('tournaments');
+        const request = store.put(tournament);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    };
+
+    const loadTournamentDB = async (id) => {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(['tournaments'], 'readonly');
+        const store = tx.objectStore('tournaments');
+        const request = store.get(id);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    };
+
+    const getAllTournamentsDB = async () => {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(['tournaments'], 'readonly');
+        const store = tx.objectStore('tournaments');
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    };
+
+    // Utility functions
+    const calculateTieBreakers = (players, rounds) => {
+      return players.map(player => {
+        const opponentIds = rounds.flatMap(r => 
+          r.pairings
+            .filter(p => p.player1Id === player.id || p.player2Id === player.id)
+            .map(p => p.player1Id === player.id ? p.player2Id : p.player1Id)
+        ).filter(id => id);
+
+        const opponents = players.filter(p => opponentIds.includes(p.id));
+        const omw = opponents.reduce((sum, opp) => sum + (opp.matchWins / Math.max(opp.matchesPlayed, 1)), 0) / Math.max(opponents.length, 1);
+        const gwp = player.gameWins / Math.max(player.gamesPlayed, 1);
+        const ogw = opponents.reduce((sum, opp) => sum + (opp.gameWins / Math.max(opp.gamesPlayed, 1)), 0) / Math.max(opponents.length, 1);
+
+        return { ...player, omw: omw || 0, gwp: gwp || 0, ogw: ogw || 0 };
+      });
+    };
+
+    const generatePairings = (players, roundNumber) => {
+      const activePlayers = players.filter(p => !p.dropped);
+      const sorted = [...activePlayers].sort((a, b) => {
+        if (b.matchPoints !== a.matchPoints) return b.matchPoints - a.matchPoints;
+        if (b.omw !== a.omw) return b.omw - a.omw;
+        if (b.gwp !== a.gwp) return b.gwp - a.gwp;
+        return b.ogw - a.ogw;
+      });
+
+      const pairings = [];
+      const paired = new Set();
+
+      for (let i = 0; i < sorted.length; i++) {
+        if (paired.has(sorted[i].id)) continue;
+        
+        for (let j = i + 1; j < sorted.length; j++) {
+          if (paired.has(sorted[j].id)) continue;
+          
+          pairings.push({
+            id: R\${roundNumber}-P\${pairings.length + 1},
+            player1Id: sorted[i].id,
+            player2Id: sorted[j].id,
+            player1Wins: 0,
+            player2Wins: 0,
+            draws: 0,
+            completed: false
+          });
+          paired.add(sorted[i].id);
+          paired.add(sorted[j].id);
+          break;
+        }
+      }
+
+      if (sorted.length % 2 === 1) {
+        const unpaired = sorted.find(p => !paired.has(p.id));
+        if (unpaired) {
+          pairings.push({
+            id: R\${roundNumber}-BYE,
+            player1Id: unpaired.id,
+            player2Id: null,
+            player1Wins: 2,
+            player2Wins: 0,
+            draws: 0,
+            completed: true
+          });
+        }
+      }
+
+      return pairings;
+    };
+
+    // Components
+    const Icon = ({ d, className = "w-6 h-6" }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={d} />
+      </svg>
+    );
+
+    const Home = ({ onNewTournament, onLoadTournament, tournaments }) => (
+      <div className="min-h-screen p-4 flex flex-col">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-red-500 mb-2">FAB Tournament</h1>
+          <p className="text-gray-400 text-sm">Gestionnaire de tournois</p>
+        </div>
+
+        <button
+          onClick={onNewTournament}
+          className="w-full bg-red-600 text-white py-4 rounded-lg font-semibold mb-4 active:bg-red-700 flex items-center justify-center gap-2"
+        >
+          <Icon d="M12 4v16m8-8H4" />
+          Nouveau Tournoi
+        </button>
+
+        {tournaments.length > 0 && (
+          <div className="flex-1">
+            <h2 className="text-lg font-semibold mb-3">Tournois récents</h2>
+            <div className="space-y-2">
+              {tournaments.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => onLoadTournament(t.id)}
+                  className="w-full bg-gray-800 p-4 rounded-lg text-left active:bg-gray-700"
+                >
+                  <div className="font-semibold">{t.name}</div>
+                  <div className="text-sm text-gray-400">
+                    {t.players.length} joueurs • Round {t.currentRound}/{t.swissRounds}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+
+    const CreateTournament = ({ onBack, onCreate }) => {
+      const [name, setName] = useState('');
+      const [swissRounds, setSwissRounds] = useState(3);
+      const [hasTopCut, setHasTopCut] = useState(false);
+      const [topCutSize, setTopCutSize] = useState(4);
+
+      const handleCreate = () => {
+        if (!name.trim()) return;
+        onCreate({ name, swissRounds, hasTopCut, topCutSize: hasTopCut ? topCutSize : 0 });
+      };
+
+      return (
+        <div className="min-h-screen p-4">
+          <button onClick={onBack} className="mb-4 text-red-500 flex items-center gap-2">
+            <Icon d="M15 19l-7-7 7-7" />
+            Retour
+          </button>
+
+          <h1 className="text-2xl font-bold mb-6">Nouveau Tournoi</h1>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Nom du tournoi</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-red-500"
+                placeholder="Ex: FNM 31/10/2025"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Nombre de rounds suisse</label>
+              <input
+                type="number"
+                min="1"
+                max="10"
+                value={swissRounds}
+                onChange={(e) => setSwissRounds(parseInt(e.target.value))}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-red-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-between bg-gray-800 p-4 rounded-lg">
+              <span className="font-medium">Top Cut</span>
+              <button
+                onClick={() => setHasTopCut(!hasTopCut)}
+                className={\`w-14 h-8 rounded-full transition \${hasTopCut ? 'bg-red-600' : 'bg-gray-600'}\`}
+              >
+                <div className={\`w-6 h-6 bg-white rounded-full transition transform \${hasTopCut ? 'translate-x-7' : 'translate-x-1'}\`} />
+              </button>
+            </div>
+
+            {hasTopCut && (
+              <div>
+                <label className="block text-sm font-medium mb-2">Taille du Top Cut</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[4, 8].map(size => (
+                    <button
+                      key={size}
+                      onClick={() => setTopCutSize(size)}
+                      className={\`py-3 rounded-lg font-semibold \${topCutSize === size ? 'bg-red-600' : 'bg-gray-800'}\`}
+                    >
+                      Top {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={handleCreate}
+              disabled={!name.trim()}
+              className="w-full bg-red-600 text-white py-4 rounded-lg font-semibold disabled:bg-gray-700 disabled:text-gray-500 mt-6"
+            >
+              Créer le tournoi
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    const PlayerManagement = ({ players, onAddPlayer, onDropPlayer, onBack }) => {
+      const [name, setName] = useState('');
+
+      const handleAdd = () => {
+        if (!name.trim()) return;
+        onAddPlayer(name.trim());
+        setName('');
+      };
+
+      return (
+        <div className="min-h-screen p-4">
+          <button onClick={onBack} className="mb-4 text-red-500 flex items-center gap-2">
+            <Icon d="M15 19l-7-7 7-7" />
+            Retour
+          </button>
+
+          <h1 className="text-2xl font-bold mb-4">Joueurs ({players.filter(p => !p.dropped).length})</h1>
+
+          <div className="mb-6 flex gap-2">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleAdd()}
+              placeholder="Nom du joueur"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-red-500"
+            />
+            <button
+              onClick={handleAdd}
+              className="bg-red-600 text-white px-6 rounded-lg font-semibold active:bg-red-700"
+            >
+              <Icon d="M12 4v16m8-8H4" />
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {players.map(player => (
+              <div
+                key={player.id}
+                className={\`bg-gray-800 p-4 rounded-lg flex items-center justify-between \${player.dropped ? 'opacity-50' : ''}\`}
+              >
+                <div>
+                  <div className="font-semibold">{player.name}</div>
+                  <div className="text-sm text-gray-400">
+                    {player.matchWins}-{player.matchLosses}-{player.matchDraws} • {player.matchPoints} pts
+                  </div>
+                </div>
+                {!player.dropped && (
+                  <button
+                    onClick={() => onDropPlayer(player.id)}
+                    className="text-red-500 font-semibold"
+                  >
+                    Drop
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    const Pairings = ({ round, players, onUpdatePairing, onCompleteRound, onBack }) => {
+      const getPlayerName = (id) => players.find(p => p.id === id)?.name || 'BYE';
+
+      const updateResult = (pairingId, p1Wins, p2Wins, draws) => {
+        onUpdatePairing(pairingId, p1Wins, p2Wins, draws);
+      };
+
+      const allCompleted = round.pairings.every(p => p.completed);
+
+      return (
+        <div className="min-h-screen p-4">
+          <button onClick={onBack} className="mb-4 text-red-500 flex items-center gap-2">
+            <Icon d="M15 19l-7-7 7-7" />
+            Retour
+          </button>
+
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-2xl font-bold">Round {round.number}</h1>
+            <span className="text-sm text-gray-400">
+              {round.pairings.filter(p => p.completed).length}/{round.pairings.length}
+            </span>
+          </div>
+
+          <div className="space-y-3 mb-20">
+            {round.pairings.map(pairing => (
+              <div key={pairing.id} className="bg-gray-800 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex-1">
+                    <div className="font-semibold">{getPlayerName(pairing.player1Id)}</div>
+                  </div>
+                  <div className="text-2xl font-bold text-gray-500 mx-4">VS</div>
+                  <div className="flex-1 text-right">
+                    <div className="font-semibold">{getPlayerName(pairing.player2Id)}</div>
+                  </div>
+                </div>
+
+                {!pairing.player2Id ? (
+                  <div className="text-center text-green-400 text-sm">BYE - Victoire automatique</div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => updateResult(pairing.id, 2, 0, 0)}
+                        className={\`py-2 rounded-lg text-sm font-semibold \${pairing.player1Wins === 2 && pairing.player2Wins === 0 ? 'bg-green-600' : 'bg-gray-700'}\`}
+                      >
+                        2-0
+                      </button>
+                      <button
+                        onClick={() => updateResult(pairing.id, 1, 1, 1)}
+                        className={\`py-2 rounded-lg text-sm font-semibold \${pairing.draws === 1 ? 'bg-yellow-600' : 'bg-gray-700'}\`}
+                      >
+                        1-1-1
+                      </button>
+                      <button
+                        onClick={() => updateResult(pairing.id, 0, 2, 0)}
+                        className={\`py-2 rounded-lg text-sm font-semibold \${pairing.player1Wins === 0 && pairing.player2Wins === 2 ? 'bg-green-600' : 'bg-gray-700'}\`}
+                      >
+                        0-2
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => updateResult(pairing.id, 2, 1, 0)}
+                        className={\`py-2 rounded-lg text-sm font-semibold \${pairing.player1Wins === 2 && pairing.player2Wins === 1 ? 'bg-green-600' : 'bg-gray-700'}\`}
+                      >
+                        2-1
+                      </button>
+                      <button
+                        onClick={() => updateResult(pairing.id, 1, 2, 0)}
+                        className={\`py-2 rounded-lg text-sm font-semibold \${pairing.player1Wins === 1 && pairing.player2Wins === 2 ? 'bg-green-600' : 'bg-gray-700'}\`}
+                      >
+                        1-2
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="fixed bottom-0 left-0 right-0 p-4 bg-gray-900 border-t border-gray-800">
+            <button
+              onClick={onCompleteRound}
+              disabled={!allCompleted}
+              className="w-full bg-red-600 text-white py-4 rounded-lg font-semibold disabled:bg-gray-700 disabled:text-gray-500"
+            >
+              Terminer le round
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    const Standings = ({ players, onBack }) => {
+      return (
+        <div className="min-h-screen p-4">
+          <button onClick={onBack} className="mb-4 text-red-500 flex items-center gap-2">
+            <Icon d="M15 19l-7-7 7-7" />
+            Retour
+          </button>
+
+          <h1 className="text-2xl font-bold mb-4">Classement</h1>
+
+          <div className="space-y-2">
+            {players.filter(p => !p.dropped).map((player, idx) => (
+              <div key={player.id} className="bg-gray-800 p-4 rounded-lg">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={\`text-2xl font-bold \${idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-gray-300' : idx === 2 ? 'text-orange-400' : 'text-gray-500'}\`}>
+                      #{idx + 1}
+                    </div>
+                    <div>
+                      <div className="font-semibold">{player.name}</div>
+                      <div className="text-sm text-gray-400">
+                        {player.matchWins}-{player.matchLosses}-{player.matchDraws}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xl font-bold">{player.matchPoints} pts</div>
+                    <div className="text-xs text-gray-400">
+                      OMW: {(player.omw * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    const TournamentDashboard = ({ tournament, onUpdate, onBack }) => {
+      const [view, setView] = useState('main');
+
+      const handleAddPlayer = (name) => {
+        const newPlayer = {
+          id: Date.now().toString(),
+          name,
+          matchWins: 0,
+          matchLosses: 0,
+          matchDraws: 0,
+          matchPoints: 0,
+          gameWins: 0,
+          gameLosses: 0,
+          gamesPlayed: 0,
+          matchesPlayed: 0,
+          omw: 0,
+          gwp: 0,
+          ogw: 0,
+          dropped: false
+        };
+        onUpdate({ ...tournament, players: [...tournament.players, newPlayer] });
+      };
+
+      const handleDropPlayer = (playerId) => {
+        const updated = tournament.players.map(p =>
+          p.id === playerId ? { ...p, dropped: true } : p
+        );
+        onUpdate({ ...tournament, players: updated });
+      };
+
+      const startNextRound = () => {
+        const playersWithTB = calculateTieBreakers(tournament.players, tournament.rounds);
+        const pairings = generatePairings(playersWithTB, tournament.currentRound + 1);
+        
+        const newRound = {
+          number: tournament.currentRound + 1,
+          pairings,
+          completed: false
+        };
+
+        onUpdate({
+          ...tournament,
+          rounds: [...tournament.rounds, newRound],
+          currentRound: tournament.currentRound + 1,
+          players: playersWithTB
+        });
+        setView('pairings');
+      };
+
+      const handleUpdatePairing = (pairingId, p1Wins, p2Wins, draws) => {
+        const currentRound = tournament.rounds[tournament.rounds.length - 1];
+        const updated = currentRound.pairings.map(p => {
+          if (p.id === pairingId) {
+            return {
+              ...p,
+              player1Wins: p1Wins,
+              player2Wins: p2Wins,
+              draws,
+              completed: true
+            };
+          }
+          return p;
+        });
+
+        const updatedRounds = tournament.rounds.map((r, idx) =>
+          idx === tournament.rounds.length - 1 ? { ...r, pairings: updated } : r
+        );
+
+        onUpdate({ ...tournament, rounds: updatedRounds });
+      };
+
+      const handleCompleteRound = () => {
+        const currentRound = tournament.rounds[tournament.rounds.length - 1];
+        let updatedPlayers = [...tournament.players];
+
+        currentRound.pairings.forEach(pairing => {
+          const p1 = updatedPlayers.find(p => p.id === pairing.player1Id);
+          const p2 = updatedPlayers.find(p => p.id === pairing.player2Id);
+
+          if (p1) {
+            p1.gamesPlayed += pairing.player1Wins + pairing.player2Wins + pairing.draws;
+            p1.gameWins += pairing.player1Wins;
+            p1.gameLosses += pairing.player2Wins;
+            p1.matchesPlayed += 1;
+
+            if (pairing.player1Wins > pairing.player2Wins) {
+              p1.matchWins += 1;
+              p1.matchPoints += 3;
+            } else if (pairing.player1Wins < pairing.player2Wins) {
+              p1.matchLosses += 1;
+            } else {
+              p1.matchDraws += 1;
+              p1.matchPoints += 1;
+            }
+          }
+
+          if (p2) {
+            p2.gamesPlayed += pairing.player1Wins + pairing.player2Wins + pairing.draws;
+            p2.gameWins += pairing.player2Wins;
+            p2.gameLosses += pairing.player1Wins;
+            p2.matchesPlayed += 1;
+
+            if (pairing.player2Wins > pairing.player1Wins) {
+              p2.matchWins += 1;
+              p2.matchPoints += 3;
+            } else if (pairing.player2Wins < pairing.player1Wins) {
+              p2.matchLosses += 1;
+            } else {
+              p2.matchDraws += 1;
+              p2.matchPoints += 1;
+            }
+          }
+        });
+
+        updatedPlayers = calculateTieBreakers(updatedPlayers, tournament.rounds);
+        updatedPlayers.sort((a, b) => {
+          if (b.matchPoints !== a.matchPoints) return b.matchPoints - a.matchPoints;
+          if (b.omw !== a.omw) return b.omw - a.omw;
+          if (b.gwp !== a.gwp) return b.gwp - a.gwp;
+          return b.ogw - a.ogw;
+        });
+
+        onUpdate({ ...tournament, players: updatedPlayers });
+        setView('main');
+      };
+
+      const handleExport = () => {
+        const dataStr = JSON.stringify(tournament, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = \`tournament-\${tournament.name}-\${Date.now()}.json\`;
+        link.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const handleImport = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const imported = JSON.parse(event.target.result);
+            onUpdate(imported);
+          } catch (error) {
+            alert('Erreur lors de l\'import');
+          }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+      };
+
+      if (view === 'players') {
+        return (
+          <PlayerManagement
+            players={tournament.players}
+            onAddPlayer={handleAddPlayer}
+            onDropPlayer={handleDropPlayer}
+            onBack={() => setView('main')}
+          />
+        );
+      }
+
+      if (view === 'pairings') {
+        const currentRound = tournament.rounds[tournament.rounds.length - 1];
+        return (
+          <Pairings
+            round={currentRound}
+            players={tournament.players}
+            onUpdatePairing={handleUpdatePairing}
+            onCompleteRound={handleCompleteRound}
+            onBack={() => setView('main')}
+          />
+        );
+      }
+
+      if (view === 'standings') {
+        return <Standings players={tournament.players} onBack={() => setView('main')} />;
+      }
+
+      const activePlayers = tournament.players.filter(p => !p.dropped).length;
+      const canStartRound = activePlayers >= 2 && tournament.currentRound < tournament.swissRounds;
+
+      return (
+        <div className="min-h-screen p-4">
+          <button onClick={onBack} className="mb-4 text-red-500 flex items-center gap-2">
+            <Icon d="M15 19l-7-7 7-7" />
+            Accueil
+          </button>
+
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold mb-2">{tournament.name}</h1>
+            <div className="flex gap-4 text-sm text-gray-400">
+              <span>{activePlayers} joueurs</span>
+              <span>•</span>
+              <span>Round {tournament.currentRound}/{tournament.swissRounds}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            <button
+              onClick={() => setView('players')}
+              className="bg-gray-800 p-4 rounded-lg text-left active:bg-gray-700"
+            >
+              <div className="text-2xl font-bold mb-1">{activePlayers}</div>
+              <div className="text-sm text-gray-400">Joueurs</div>
+            </button>
+            <button
+              onClick={() => setView('standings')}
+              className="bg-gray-800 p-4 rounded-lg text-left active:bg-gray-700"
+            >
+              <div className="text-2xl font-bold mb-1">{tournament.rounds.length}</div>
+              <div className="text-sm text-gray-400">Rounds joués</div>
+            </button>
+          </div>
+
+          <div className="space-y-3 mb-6">
+            {canStartRound && (
+              <button
+                onClick={startNextRound}
+                className="w-full bg-red-600 text-white py-4 rounded-lg font-semibold active:bg-red-700 flex items-center justify-center gap-2"
+              >
+                <Icon d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                Démarrer Round {tournament.currentRound + 1}
+              </button>
+            )}
+
+            {tournament.rounds.length > 0 && (
+              <button
+                onClick={() => setView('pairings')}
+                className="w-full bg-gray-800 text-white py-4 rounded-lg font-semibold active:bg-gray-700"
+              >
+                Voir les pairings actuels
+              </button>
+            )}
+
+            <button
+              onClick={() => setView('standings')}
+              className="w-full bg-gray-800 text-white py-4 rounded-lg font-semibold active:bg-gray-700 flex items-center justify-center gap-2"
+            >
+              <Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              Classement
+            </button>
+          </div>
+
+          <div className="border-t border-gray-800 pt-6">
+            <h2 className="text-sm font-semibold text-gray-400 mb-3">Données</h2>
+            <div className="flex gap-2">
+              <button
+                onClick={handleExport}
+                className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold active:bg-blue-700 text-sm"
+              >
+                Exporter
+              </button>
+              <label className="flex-1 bg-purple-600 text-white py-3 rounded-lg font-semibold active:bg-purple-700 text-sm text-center cursor-pointer">
+                Importer
+                <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+              </label>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // Main App
+    const App = () => {
+      const [screen, setScreen] = useState('home');
+      const [tournaments, setTournaments] = useState([]);
+      const [currentTournament, setCurrentTournament] = useState(null);
+
+      useEffect(() => {
+        initDB().then(async () => {
+          const loaded = await getAllTournamentsDB();
+          setTournaments(loaded);
+        });
+      }, []);
+
+      const handleCreateTournament = (config) => {
+        const newTournament = {
+          id: Date.now().toString(),
+          name: config.name,
+          swissRounds: config.swissRounds,
+          hasTopCut: config.hasTopCut,
+          topCutSize: config.topCutSize,
+          currentRound: 0,
+          players: [],
+          rounds: [],
+          createdAt: new Date().toISOString()
+        };
+        
+        saveTournamentDB(newTournament).then(() => {
+          setTournaments([newTournament, ...tournaments]);
+          setCurrentTournament(newTournament);
+          setScreen('tournament');
+        });
+      };
+
+      const handleLoadTournament = async (id) => {
+        const tournament = await loadTournamentDB(id);
+        setCurrentTournament(tournament);
+        setScreen('tournament');
+      };
+
+      const handleUpdateTournament = (updated) => {
+        saveTournamentDB(updated).then(() => {
+          setCurrentTournament(updated);
+          setTournaments(tournaments.map(t => t.id === updated.id ? updated : t));
+        });
+      };
+
+      if (screen === 'create') {
+        return (
+          <CreateTournament
+            onBack={() => setScreen('home')}
+            onCreate={handleCreateTournament}
+          />
+        );
+      }
+
+      if (screen === 'tournament' && currentTournament) {
+        return (
+          <TournamentDashboard
+            tournament={currentTournament}
+            onUpdate={handleUpdateTournament}
+            onBack={() => {
+              setScreen('home');
+              setCurrentTournament(null);
+            }}
+          />
+        );
+      }
+
+      return (
+        <Home
+          onNewTournament={() => setScreen('create')}
+          onLoadTournament={handleLoadTournament}
+          tournaments={tournaments}
+        />
+      );
+    };
+
+    // Register Service Worker for PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        const swCode = \`
+          self.addEventListener('install', (e) => {
+            e.waitUntil(
+              caches.open('fab-tournament-v1').then((cache) => {
+                return cache.addAll(['/']);
+              })
+            );
+          });
+
+          self.addEventListener('fetch', (e) => {
+            e.respondWith(
+              caches.match(e.request).then((response) => {
+                return response || fetch(e.request);
+              })
+            );
+          });
+        \`;
+        
+        const blob = new Blob([swCode], { type: 'application/javascript' });
+        const swUrl = URL.createObjectURL(blob);
+        
+        navigator.serviceWorker.register(swUrl).catch(() => {});
+      });
+    }
+
+    // Render app
+    const root = createRoot(document.getElementById('app'));
+    root.render(React.createElement(App));
+  </script>
+</body>
+</html>

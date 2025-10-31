@@ -4,6 +4,8 @@ import './App.css';
 
 // Composants
 import Header from './components/Header';
+import BottomNavigation from './components/BottomNavigation';
+import FloatingActionButton from './components/FloatingActionButton';
 import TournamentList from './components/TournamentList';
 import TournamentView from './components/TournamentView';
 import PlayerManagement from './components/PlayerManagement';
@@ -28,6 +30,12 @@ function App() {
             <Route path="/tournament/:id/bracket" element={<EliminationBracket />} />
           </Routes>
         </main>
+        
+        {/* Navigation mobile en bas */}
+        <BottomNavigation />
+        
+        {/* FAB pour import/export */}
+        <FloatingActionButton />
       </div>
     </Router>
   );
