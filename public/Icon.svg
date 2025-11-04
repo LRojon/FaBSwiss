@@ -1,0 +1,28 @@
+<svg width="192" height="192" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="metalGold" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+
+    <pattern id="parchment" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+      <rect width="20" height="20" fill="#1c1917"/>
+      <circle cx="5" cy="5" r="0.5" fill="#292524" opacity="0.3"/>
+      <circle cx="15" cy="10" r="0.5" fill="#292524" opacity="0.3"/>
+      <circle cx="10" cy="15" r="0.5" fill="#292524" opacity="0.3"/>
+    </pattern>
+  </defs>
+
+  <rect width="192" height="192" fill="url(#parchment)" rx="38"/>
+  <rect width="192" height="192" fill="none" stroke="url(#metalGold)" stroke-width="6" rx="38"/>
+  
+  <!-- Couronne simplifiée -->
+  <g transform="translate(96, 96)">
+    <path d="M -58 32 L -48 0 L -24 19 L 0 -13 L 24 19 L 48 0 L 58 32 Z" 
+          fill="url(#metalGold)" stroke="#d97706" stroke-width="5"/>
+    <circle cx="-24" cy="10" r="5" fill="#dc2626"/>
+    <circle cx="0" cy="-3" r="5" fill="#dc2626"/>
+    <circle cx="24" cy="10" r="5" fill="#dc2626"/>
+  </g>
+</svg>

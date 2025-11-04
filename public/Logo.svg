@@ -1,0 +1,50 @@
+<svg width="250" height="250" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="metalGold" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+
+    <pattern id="parchment" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+      <rect width="20" height="20" fill="#1c1917"/>
+      <circle cx="5" cy="5" r="0.5" fill="#292524" opacity="0.3"/>
+      <circle cx="15" cy="10" r="0.5" fill="#292524" opacity="0.3"/>
+      <circle cx="10" cy="15" r="0.5" fill="#292524" opacity="0.3"/>
+    </pattern>
+  </defs>
+
+  <rect width="250" height="250" fill="url(#parchment)" rx="40"/>
+  
+  <!-- Texte haut -->
+  <text x="125" y="50" font-family="Georgia, serif" font-size="14" fill="#d97706" text-anchor="middle" font-weight="bold" letter-spacing="1">TOURNAMENT</text>
+  
+  <!-- Couronne -->
+  <g transform="translate(125, 95)">
+    <path d="M -47 25 L -40 0 L -20 15 L 0 -10 L 20 15 L 40 0 L 47 25 Z" 
+          fill="url(#metalGold)" stroke="#d97706" stroke-width="2.5"/>
+    <circle cx="-20" cy="8" r="4" fill="#dc2626"/>
+    <circle cx="0" cy="-2" r="4" fill="#dc2626"/>
+    <circle cx="20" cy="8" r="4" fill="#dc2626"/>
+  </g>
+  
+  <!-- Grimoire/Livre ouvert -->
+  <g transform="translate(125, 125)">
+    <path d="M -50 0 L -50 60 Q -50 68 -42 68 L -10 68 L 0 72 L 10 68 L 42 68 Q 50 68 50 60 L 50 0 Q 50 -4 46 -4 L 4 -4 L 0 -8 L -4 -4 L -46 -4 Q -50 -4 -50 0 Z" 
+          fill="#1c1917" stroke="url(#metalGold)" stroke-width="2.5"/>
+    
+    <!-- Pages intérieures -->
+    <line x1="0" y1="-4" x2="0" y2="68" stroke="#292524" stroke-width="2"/>
+    <path d="M -40 10 L -15 10 M -40 22 L -20 22 M -40 34 L -15 34" 
+          stroke="#d97706" stroke-width="1.5" opacity="0.5"/>
+    <path d="M 15 10 L 40 10 M 20 22 L 40 22 M 15 34 L 40 34" 
+          stroke="#d97706" stroke-width="1.5" opacity="0.5"/>
+    
+    <!-- Sceau -->
+    <circle cx="0" cy="48" r="14" fill="#dc2626" opacity="0.3" stroke="#dc2626" stroke-width="2"/>
+    <text x="0" y="55" font-family="Georgia, serif" font-size="16" fill="#dc2626" text-anchor="middle" font-weight="bold">T</text>
+  </g>
+  
+  <!-- Texte bas -->
+  <text x="125" y="235" font-family="Georgia, serif" font-size="12" fill="#9ca3af" text-anchor="middle">MANAGER</text>
+</svg>
